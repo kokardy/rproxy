@@ -3,6 +3,8 @@ package main
 import (
 	"bufio"
 	"bytes"
+	"flag"
+	"fmt"
 	"io"
 	"io/ioutil"
 	"log"
@@ -34,7 +36,7 @@ func NewRegConverter(ori, dest string) (c Converter) {
 		for sc.Scan() {
 			line := sc.Text()
 			new_line := reg1.ReplaceAllString(line, dest)
-			buf.Write([]byte(new_line))
+			buf.Write([]byte(new_line + "\n"))
 		}
 		rc = ioutil.NopCloser(bytes.NewReader(buf.Bytes()))
 		return
@@ -56,12 +58,22 @@ func NewModifier(c Converter) (mod Modifier) {
 func main() {
 	//rproxy http host listenport original replace
 
-	var scheme string
-	var host string
-	var listenport string
+	var remoteScheme string
+	var remoteHost string
+	var addr string
 	var ori, dest string
 
-	dir := NewDirector(scheme, host)
+	flag.StringVar(&remoteScheme, "scheme", "http", "remote scheme: -scheme http or -s https. http default")
+	flag.StringVar(&remoteHost, "rhost", "127.0.0.1:80", "remote address: -rhost www.google.com:80  default 127.0.0.1:80")
+	flag.StringVar(&addr, "addr", ":8080", "address: -addr :8080 default 8080")
+	flag.StringVar(&ori, "ori", "", `original Regexp: -ori href=\\"https?://(.*)/\\"`)
+	flag.StringVar(&dest, "dest", "", `modifiled: -dest href=\\"https?://$1/\\"`)
+
+	flag.Parse()
+
+	fmt.Println("a", addr)
+
+	dir := NewDirector(remoteScheme, remoteHost)
 	conv := NewRegConverter(ori, dest)
 	mod := NewModifier(conv)
 	rp := &httputil.ReverseProxy{
@@ -69,7 +81,7 @@ func main() {
 		ModifyResponse: mod,
 	}
 	server := http.Server{
-		Addr:    listenport,
+		Addr:    addr,
 		Handler: rp,
 	}
 	if err := server.ListenAndServe(); err != nil {
