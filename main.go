@@ -46,10 +46,14 @@ func NewRegConverter(ori, dest string) (c Converter) {
 
 func NewModifier(c Converter) (mod Modifier) {
 	mod = func(res *http.Response) error {
-
-		original := res.Body
-		modified := c(original)
-		res.Body = modified
+		for _, ct := range res.Header["Content-type"] {
+			if ct == "text/html" {
+				original := res.Body
+				modified := c(original)
+				res.Body = modified
+				return nil
+			}
+		}
 		return nil
 	}
 	return
