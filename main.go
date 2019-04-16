@@ -14,8 +14,10 @@ import (
 	"strings"
 )
 
+//Director はリクエストの向きを変えてリバースプロキシのターゲットを設定する
 type Director func(*http.Request)
 
+//NewDirector は新しいDirectorをスキームとホスト名を指定して生成する
 func NewDirector(scheme, host string) (dir Director) {
 	dir = func(request *http.Request) {
 		request.URL.Scheme = scheme
@@ -24,10 +26,10 @@ func NewDirector(scheme, host string) (dir Director) {
 	return
 }
 
-type Modifier func(*http.Response) error
-
+//Converter はio.Readerから読み込んで中身を書き換えてio.ReadCloserにして返す
 type Converter func(io.Reader) io.ReadCloser
 
+//NewRegConverter 正規表現で中身を書き換えるConveterを生成する
 func NewRegConverter(ori, dest string) (c Converter) {
 	reg1 := regexp.MustCompile(ori)
 	c = func(r io.Reader) (rc io.ReadCloser) {
@@ -44,6 +46,10 @@ func NewRegConverter(ori, dest string) (c Converter) {
 	return
 }
 
+//Modifier はリバースプロキシで中継するレスポンスを書き換える
+type Modifier func(*http.Response) error
+
+//NewModifier はModifierをConverterから生成する
 func NewModifier(c Converter) (mod Modifier) {
 	mod = func(res *http.Response) error {
 		for _, ct := range res.Header["Content-Type"] {
@@ -60,8 +66,8 @@ func NewModifier(c Converter) (mod Modifier) {
 }
 
 func main() {
-	//rproxy http host listenport original replace
 
+	//*****************コマンドラインオプション START
 	var remoteScheme string
 	var remoteHost string
 	var addr string
@@ -74,20 +80,27 @@ func main() {
 	flag.StringVar(&dest, "dest", "", `modifiled: -dest href=\\"https?://$1/\\"`)
 
 	flag.Parse()
-
-	fmt.Println("a", addr)
+	//******************コマンドラインオプション END
 
 	dir := NewDirector(remoteScheme, remoteHost)
 	conv := NewRegConverter(ori, dest)
 	mod := NewModifier(conv)
+	//リバースプロキシ生成
 	rp := &httputil.ReverseProxy{
 		Director:       dir,
 		ModifyResponse: mod,
 	}
+
+	//Server生成してリバースプロキシをHandlerとしてセットする
 	server := http.Server{
 		Addr:    addr,
 		Handler: rp,
 	}
+
+	//Listenしているポートを表示する
+	fmt.Println("Listen: ", addr)
+	fmt.Println("Press Ctrl+C to stop this server.")
+
 	if err := server.ListenAndServe(); err != nil {
 		log.Fatal(err.Error())
 	}
