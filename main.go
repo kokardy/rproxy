@@ -11,12 +11,12 @@ import (
 	"net/http"
 	"net/http/httputil"
 	"regexp"
+	"strings"
 )
 
 type Director func(*http.Request)
 
 func NewDirector(scheme, host string) (dir Director) {
-
 	dir = func(request *http.Request) {
 		request.URL.Scheme = scheme
 		request.URL.Host = host
@@ -46,8 +46,8 @@ func NewRegConverter(ori, dest string) (c Converter) {
 
 func NewModifier(c Converter) (mod Modifier) {
 	mod = func(res *http.Response) error {
-		for _, ct := range res.Header["Content-type"] {
-			if ct == "text/html" {
+		for _, ct := range res.Header["Content-Type"] {
+			if strings.Contains(ct, "text/html") {
 				original := res.Body
 				modified := c(original)
 				res.Body = modified
