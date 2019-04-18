@@ -10,5 +10,5 @@ RUN go get github.com/kokardy/rproxy
 WORKDIR /go/src/github.com/kokardy/rproxy
 RUN go build .
 
-CMD ["./rproxy", "-scheme $SCHEME", "-rhost $RSHOT", "-addr $ADDR", "-ori $ORI", "-dest $DEST"]
+CMD ["./rproxy", "-scheme $SCHEME", "-rhost $RHOST", "-addr $ADDR", "-ori $ORI", "-dest $DEST"]
 
