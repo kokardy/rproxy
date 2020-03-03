@@ -34,11 +34,26 @@ func NewRegConverter(ori, dest string) (c Converter) {
 	reg1 := regexp.MustCompile(ori)
 	c = func(r io.Reader) (rc io.ReadCloser) {
 		buf := bytes.NewBuffer(nil)
-		sc := bufio.NewScanner(r)
-		for sc.Scan() {
-			line := sc.Text()
-			new_line := reg1.ReplaceAllString(line, dest)
-			buf.Write([]byte(new_line + "\n"))
+		sc := bufio.NewReader(r)
+		preline := make([]byte, 0, 0)
+		for {
+			line, isPrefix, err := sc.ReadLine()
+			if err == io.EOF {
+				break
+			}
+			if err != nil {
+				log.Fatal(err.Error())
+			}
+			if isPrefix {
+				preline = append(preline, line...)
+				continue
+			} else {
+				line = append(preline, line...)
+				preline = []byte{}
+
+				new_line := reg1.ReplaceAllString(string(line), dest)
+				buf.Write([]byte(new_line + "\n"))
+			}
 		}
 		rc = ioutil.NopCloser(bytes.NewReader(buf.Bytes()))
 		return
