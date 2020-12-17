@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"net/http/httputil"
 	"regexp"
+	"strconv"
 	"strings"
 )
 
@@ -23,9 +24,6 @@ func NewDirector(scheme, host string) (dir Director) {
 		url := *request.URL
 		url.Scheme = scheme
 		url.Host = host
-		//request.Host = host
-		fmt.Println(url)
-		//fmt.Println(request)
 		var buf []byte
 		var err error
 		if request.Body != nil {
@@ -48,11 +46,11 @@ func NewDirector(scheme, host string) (dir Director) {
 }
 
 //Converter はio.Readerから読み込んで中身を書き換えてio.ReadCloserにして返す
-type Converter func(io.Reader) io.ReadCloser
+type Converter func(io.Reader) (io.ReadCloser, int)
 
 //NewRegConverter 正規表現で中身を書き換えるConveterを生成する
-func NewRegConverter(ori, dest List) (c Converter) {
-	c = func(r io.Reader) (rc io.ReadCloser) {
+func NewRegConverter(ori, dest MultipleStringFlag) (c Converter) {
+	c = func(r io.Reader) (rc io.ReadCloser, contentLength int) {
 		buf := bytes.NewBuffer(nil)
 		sc := bufio.NewReader(r)
 		preline := make([]byte, 0, 0)
@@ -70,17 +68,18 @@ func NewRegConverter(ori, dest List) (c Converter) {
 			} else {
 				line = append(preline, line...)
 				preline = []byte{}
-				new_line := line
+				newLine := line
 				for i := 0; i < len(ori); i++ {
 					o := ori[i]
 					d := dest[i]
 					reg1 := regexp.MustCompile(o)
-					new_line = []byte(reg1.ReplaceAllString(string(new_line), d))
+					newLine = []byte(reg1.ReplaceAllString(string(newLine), d))
 				}
-				buf.Write(append(new_line, []byte("\n")...))
+				buf.Write(append(newLine, []byte("\n")...))
 			}
 		}
 		rc = ioutil.NopCloser(bytes.NewReader(buf.Bytes()))
+		contentLength = len(buf.Bytes())
 		return
 	}
 	return
@@ -95,8 +94,9 @@ func NewModifier(c Converter) (mod Modifier) {
 		for _, ct := range res.Header["Content-Type"] {
 			if strings.Contains(ct, "text/html") {
 				original := res.Body
-				modified := c(original)
+				modified, contentLength := c(original)
 				res.Body = modified
+				res.Header.Set("Content-Length", strconv.Itoa(contentLength))
 				return nil
 			}
 		}
@@ -105,13 +105,16 @@ func NewModifier(c Converter) (mod Modifier) {
 	return
 }
 
-type List []string
+//MultipleStringFlag is for the same name option
+//ex. command -arg A -arg B
+type MultipleStringFlag []string
 
-func (l *List) Set(v string) error {
+//Set set value
+func (l *MultipleStringFlag) Set(v string) error {
 	*l = append(*l, v)
 	return nil
 }
-func (l *List) String() string {
+func (l *MultipleStringFlag) String() string {
 	return fmt.Sprintf("%v", *l)
 }
 
@@ -121,7 +124,7 @@ func main() {
 	var remoteScheme string
 	var remoteHost string
 	var addr string
-	var ori, dest List
+	var ori, dest MultipleStringFlag
 
 	flag.StringVar(&remoteScheme, "scheme", "http", "remote scheme: -scheme http or -s https. http default")
 	flag.StringVar(&remoteHost, "rhost", "127.0.0.1:80", "remote address: -rhost www.google.com:80  default 127.0.0.1:80")
