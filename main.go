@@ -20,8 +20,29 @@ type Director func(*http.Request)
 //NewDirector は新しいDirectorをスキームとホスト名を指定して生成する
 func NewDirector(scheme, host string) (dir Director) {
 	dir = func(request *http.Request) {
-		request.URL.Scheme = scheme
-		request.URL.Host = host
+		url := *request.URL
+		url.Scheme = scheme
+		url.Host = host
+		//request.Host = host
+		fmt.Println(url)
+		//fmt.Println(request)
+		var buf []byte
+		var err error
+		if request.Body != nil {
+			buf, err = ioutil.ReadAll(request.Body)
+			if err != nil {
+				log.Fatal(err.Error())
+			}
+
+		} else {
+			buf = []byte("")
+		}
+		req, err := http.NewRequest(request.Method, url.String(), bytes.NewBuffer(buf))
+		if err != nil {
+			log.Fatal(err.Error())
+		}
+		req.Header = request.Header
+		*request = *req
 	}
 	return
 }
@@ -30,8 +51,7 @@ func NewDirector(scheme, host string) (dir Director) {
 type Converter func(io.Reader) io.ReadCloser
 
 //NewRegConverter 正規表現で中身を書き換えるConveterを生成する
-func NewRegConverter(ori, dest string) (c Converter) {
-	reg1 := regexp.MustCompile(ori)
+func NewRegConverter(ori, dest List) (c Converter) {
 	c = func(r io.Reader) (rc io.ReadCloser) {
 		buf := bytes.NewBuffer(nil)
 		sc := bufio.NewReader(r)
@@ -50,9 +70,14 @@ func NewRegConverter(ori, dest string) (c Converter) {
 			} else {
 				line = append(preline, line...)
 				preline = []byte{}
-
-				new_line := reg1.ReplaceAllString(string(line), dest)
-				buf.Write([]byte(new_line + "\n"))
+				new_line := line
+				for i := 0; i < len(ori); i++ {
+					o := ori[i]
+					d := dest[i]
+					reg1 := regexp.MustCompile(o)
+					new_line = []byte(reg1.ReplaceAllString(string(new_line), d))
+				}
+				buf.Write(append(new_line, []byte("\n")...))
 			}
 		}
 		rc = ioutil.NopCloser(bytes.NewReader(buf.Bytes()))
@@ -80,19 +105,29 @@ func NewModifier(c Converter) (mod Modifier) {
 	return
 }
 
+type List []string
+
+func (l *List) Set(v string) error {
+	*l = append(*l, v)
+	return nil
+}
+func (l *List) String() string {
+	return fmt.Sprintf("%v", *l)
+}
+
 func main() {
 
 	//*****************コマンドラインオプション START
 	var remoteScheme string
 	var remoteHost string
 	var addr string
-	var ori, dest string
+	var ori, dest List
 
 	flag.StringVar(&remoteScheme, "scheme", "http", "remote scheme: -scheme http or -s https. http default")
 	flag.StringVar(&remoteHost, "rhost", "127.0.0.1:80", "remote address: -rhost www.google.com:80  default 127.0.0.1:80")
 	flag.StringVar(&addr, "addr", ":8080", "address: -addr :8080 default 8080")
-	flag.StringVar(&ori, "ori", "", `original Regexp: -ori href=\\"https?://(.*)/\\"`)
-	flag.StringVar(&dest, "dest", "", `modifiled: -dest href=\\"https?://$1/\\"`)
+	flag.Var(&ori, "ori", `original Regexp: -ori href=\\"https?://(.*)/\\"`)
+	flag.Var(&dest, "dest", `modifiled: -dest href=\\"https?://$1/\\"`)
 
 	flag.Parse()
 	//******************コマンドラインオプション END
@@ -114,6 +149,7 @@ func main() {
 
 	//Listenしているポートを表示する
 	fmt.Println("Listen: ", addr)
+	fmt.Printf("ori:%s dest:%s \n", ori, dest)
 	fmt.Println("Press Ctrl+C to stop this server.")
 
 	if err := server.ListenAndServe(); err != nil {
