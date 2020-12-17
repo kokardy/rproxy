@@ -1,4 +1,4 @@
-from golang
+from golang:1.15-buster
 
 ENV GOPATH=/go
 RUN mkdir -p /go
