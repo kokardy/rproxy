@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"net/http/httputil"
 	"regexp"
+	"strconv"
 	"strings"
 )
 
@@ -27,12 +28,12 @@ func NewDirector(scheme, host string) (dir Director) {
 }
 
 //Converter はio.Readerから読み込んで中身を書き換えてio.ReadCloserにして返す
-type Converter func(io.Reader) io.ReadCloser
+type Converter func(io.Reader) (io.ReadCloser, int)
 
 //NewRegConverter 正規表現で中身を書き換えるConveterを生成する
 func NewRegConverter(ori, dest string) (c Converter) {
 	reg1 := regexp.MustCompile(ori)
-	c = func(r io.Reader) (rc io.ReadCloser) {
+	c = func(r io.Reader) (rc io.ReadCloser, contentLength int) {
 		buf := bytes.NewBuffer(nil)
 		sc := bufio.NewReader(r)
 		preline := make([]byte, 0, 0)
@@ -56,6 +57,7 @@ func NewRegConverter(ori, dest string) (c Converter) {
 			}
 		}
 		rc = ioutil.NopCloser(bytes.NewReader(buf.Bytes()))
+		contentLength = len(buf.Bytes())
 		return
 	}
 	return
@@ -70,8 +72,9 @@ func NewModifier(c Converter) (mod Modifier) {
 		for _, ct := range res.Header["Content-Type"] {
 			if strings.Contains(ct, "text/html") {
 				original := res.Body
-				modified := c(original)
+				modified, contentLength := c(original)
 				res.Body = modified
+				res.Header.Set("Content-Length", strconv.Itoa(contentLength))
 				return nil
 			}
 		}
