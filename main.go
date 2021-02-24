@@ -92,7 +92,8 @@ type Modifier func(*http.Response) error
 func NewModifier(c Converter) (mod Modifier) {
 	mod = func(res *http.Response) error {
 		for _, ct := range res.Header["Content-Type"] {
-			if strings.Contains(ct, "text/html") {
+			if strings.Contains(ct, "text/html") ||
+				strings.Contains(ct, "application/json") {
 				original := res.Body
 				modified, contentLength := c(original)
 				res.Body = modified
